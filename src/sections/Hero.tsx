@@ -1,4 +1,5 @@
-import heroImage from "../assets/images/hero-community.jpg";
+import heroImage from "../assets/images/hero-pick-five.jpg";
+import heroImageWebp from "../assets/images/hero-pick-five.webp";
 import Button from "../components/Button";
 import Reveal from "../components/Reveal";
 import { ROUTES } from "../lib/routes";
@@ -6,15 +7,18 @@ import { ROUTES } from "../lib/routes";
 export default function Hero() {
   return (
     <section className="relative overflow-hidden bg-forest-950" aria-label="Introduction">
-      <img
-        src={heroImage}
-        alt="Members of Bana Ba Sawa UK gathered outdoors in traditional attire at a community celebration"
-        className="absolute inset-0 h-full w-full object-cover object-[64%_42%]"
-        loading="eager"
-        fetchPriority="high"
-        width={1536}
-        height={1024}
-      />
+      <picture className="absolute inset-0 block h-full w-full">
+        <source srcSet={heroImageWebp} type="image/webp" />
+        <img
+          src={heroImage}
+          alt="Members of Bana Ba Sawa UK gathered together in traditional attire at a community celebration"
+          className="h-full w-full object-cover object-[50%_40%] sm:object-[52%_38%] lg:object-[54%_36%]"
+          loading="eager"
+          fetchPriority="high"
+          width={1376}
+          height={650}
+        />
+      </picture>
       <div
         className="absolute inset-0"
         style={{

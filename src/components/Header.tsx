@@ -1,13 +1,22 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import Logo from "./Logo";
 import Button from "./Button";
 import { NAV_ITEMS, ROUTES } from "../lib/routes";
+import { useAuth } from "../context/AuthContext";
+
+const navLinkClass = (isActive: boolean) =>
+  `relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] transition-colors ${
+    isActive ? "text-forest-900" : "text-ink-soft hover:text-forest-900"
+  }`;
 
 export default function Header() {
   const [isOpen, setIsOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { member, loading, logout } = useAuth();
   const closeMenu = () => setIsOpen(false);
 
   useEffect(() => {
@@ -16,6 +25,18 @@ export default function Header() {
       document.body.style.overflow = "";
     };
   }, [isOpen]);
+
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+      closeMenu();
+      navigate(ROUTES.home);
+    } finally {
+      setLoggingOut(false);
+    }
+  }
 
   return (
     <header className="sticky top-0 z-50 border-b border-forest-900/8 bg-cream">
@@ -35,9 +56,7 @@ export default function Header() {
                 key={item.path}
                 to={item.path}
                 aria-current={isActive ? "page" : undefined}
-                className={`relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] transition-colors ${
-                  isActive ? "text-forest-900" : "text-ink-soft hover:text-forest-900"
-                }`}
+                className={navLinkClass(isActive)}
               >
                 {item.label}
                 <span
@@ -50,10 +69,40 @@ export default function Header() {
           })}
         </nav>
 
-        <div className="hidden xl:block">
-          <Button to={ROUTES.membership} variant="primary" className="rounded-full px-5 py-2.5">
-            Join Us
-          </Button>
+        <div className="hidden items-center gap-5 xl:flex">
+          {loading ? (
+            <Button to={ROUTES.membership} variant="primary" className="rounded-full px-5 py-2.5">
+              Join Us
+            </Button>
+          ) : member ? (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleLogout()}
+                disabled={loggingOut}
+                className="whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-ink-soft transition-colors hover:text-forest-900"
+              >
+                {loggingOut ? "Signing out..." : "Log out"}
+              </button>
+              <Button to={ROUTES.portal} variant="primary" className="rounded-full px-5 py-2.5">
+                Member Portal
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to={ROUTES.login} className={navLinkClass(location.pathname === ROUTES.login)}>
+                Sign In
+                <span
+                  className={`absolute -bottom-0.5 left-0 h-px w-full bg-gold transition-opacity ${
+                    location.pathname === ROUTES.login ? "opacity-100" : "opacity-0"
+                  }`}
+                />
+              </Link>
+              <Button to={ROUTES.membership} variant="primary" className="rounded-full px-5 py-2.5">
+                Join Us
+              </Button>
+            </>
+          )}
         </div>
 
         <button
@@ -89,11 +138,52 @@ export default function Header() {
               </Link>
             );
           })}
-          <div className="mt-3">
-            <Button to={ROUTES.membership} variant="primary" className="w-full rounded-full" onClick={closeMenu}>
-              Join Us
-            </Button>
-          </div>
+          {loading ? (
+            <div className="mt-3">
+              <Button to={ROUTES.membership} variant="primary" className="w-full rounded-full" onClick={closeMenu}>
+                Join Us
+              </Button>
+            </div>
+          ) : member ? (
+            <>
+              <Link
+                to={ROUTES.portal}
+                onClick={closeMenu}
+                className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
+                  location.pathname.startsWith(ROUTES.portal) ? "bg-forest-50 text-forest-900" : "text-ink-soft"
+                }`}
+              >
+                Member Portal
+              </Link>
+              <div className="mt-3">
+                <Button
+                  variant="primary"
+                  className="w-full rounded-full"
+                  onClick={() => void handleLogout()}
+                  disabled={loggingOut}
+                >
+                  {loggingOut ? "Signing out..." : "Log out"}
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <Link
+                to={ROUTES.login}
+                onClick={closeMenu}
+                className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
+                  location.pathname === ROUTES.login ? "bg-forest-50 text-forest-900" : "text-ink-soft"
+                }`}
+              >
+                Sign In
+              </Link>
+              <div className="mt-3">
+                <Button to={ROUTES.membership} variant="primary" className="w-full rounded-full" onClick={closeMenu}>
+                  Join Us
+                </Button>
+              </div>
+            </>
+          )}
         </nav>
       </div>
     </header>
