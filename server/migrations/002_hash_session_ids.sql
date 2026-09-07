@@ -1,0 +1,5 @@
+-- Session tokens are stored as SHA-256 hashes of the raw cookie value.
+-- Applied once by migrate.ts / SQLite startup (id: 002_hash_session_ids).
+-- Existing plaintext session primary keys are hashed in application code
+-- so this change does not require PostgreSQL extensions such as pgcrypto.
+-- Do not apply this migration twice.

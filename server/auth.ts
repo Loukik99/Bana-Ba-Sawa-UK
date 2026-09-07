@@ -1,41 +1,51 @@
-import { createHash, randomBytes } from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { compare, hash, hashSync } from "bcryptjs";
-import type { DatabaseSync } from "node:sqlite";
-import { deleteSession, findValidSession, toPublicMember } from "./db.ts";
-import type { Member } from "./types.ts";
+import { publicAppUrl as configuredPublicAppUrl } from "./config.js";
+import { createSecretToken, hashSecretToken, isSecretTokenFormat } from "./crypto.js";
+import { createSession, deleteSession, findValidSession, toPublicMember, type AppDatabase } from "./db.js";
+import type { Member } from "./types.js";
 
 export const SESSION_COOKIE = "bbs.sid";
 export const SESSION_DAYS = 7;
 const BCRYPT_ROUNDS = 12;
-const DUMMY_HASH = hashSync("timing-protection-placeholder", 10);
+const DUMMY_HASH = hashSync("timing-protection-placeholder", BCRYPT_ROUNDS);
 
 export interface AuthLocals {
   member?: Member;
-  sessionId?: string;
+  sessionToken?: string;
 }
 
-export function sessionCookieOptions() {
+export function sessionCookieBaseOptions() {
   const isProduction = process.env.NODE_ENV === "production";
   return {
     httpOnly: true,
     sameSite: "lax" as const,
     secure: isProduction,
     path: "/",
+  };
+}
+
+export function sessionCookieOptions() {
+  return {
+    ...sessionCookieBaseOptions(),
     maxAge: SESSION_DAYS * 24 * 60 * 60 * 1000,
   };
 }
 
 export function createSessionId(): string {
-  return randomBytes(32).toString("hex");
+  return createSecretToken();
 }
 
 export function createResetToken(): string {
-  return randomBytes(32).toString("hex");
+  return createSecretToken();
 }
 
 export function hashResetToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return hashSecretToken(token);
+}
+
+export function hashSessionToken(token: string): string {
+  return hashSecretToken(token);
 }
 
 export function resetTokenTtlMinutes(): number {
@@ -48,8 +58,7 @@ export function resetTokenExpiryDate(now = Date.now()): string {
 }
 
 export function publicAppUrl(): string {
-  const url = process.env.APP_URL || process.env.CLIENT_ORIGIN || "http://localhost:5173";
-  return url.replace(/\/$/, "");
+  return configuredPublicAppUrl();
 }
 
 export function sessionExpiryDate(): string {
@@ -64,30 +73,42 @@ export async function passwordsMatch(password: string, passwordHash: string | un
   return compare(password, passwordHash || DUMMY_HASH);
 }
 
-export function getSessionId(req: Request): string | undefined {
+export function getSessionToken(req: Request): string | undefined {
   const value = req.cookies?.[SESSION_COOKIE];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
+  if (typeof value !== "string" || !isSecretTokenFormat(value)) {
+    return undefined;
+  }
+  return value;
 }
 
-export function attachSession(db: DatabaseSync) {
-  return (req: Request, res: Response, next: NextFunction) => {
+export async function issueAuthSession(res: Response, db: AppDatabase, userId: number): Promise<void> {
+  const rawToken = createSessionId();
+  await createSession(db, userId, rawToken, sessionExpiryDate());
+  res.cookie(SESSION_COOKIE, rawToken, sessionCookieOptions());
+}
+
+export function attachSession(db: AppDatabase) {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const sessionId = getSessionId(req);
-      if (!sessionId) {
+      const sessionToken = getSessionToken(req);
+      if (!sessionToken) {
+        if (typeof req.cookies?.[SESSION_COOKIE] === "string") {
+          res.clearCookie(SESSION_COOKIE, sessionCookieBaseOptions());
+        }
         next();
         return;
       }
 
-      const session = findValidSession(db, sessionId);
+      const session = await findValidSession(db, sessionToken);
       if (!session) {
-        res.clearCookie(SESSION_COOKIE, { path: "/" });
+        res.clearCookie(SESSION_COOKIE, sessionCookieBaseOptions());
         next();
         return;
       }
 
       const locals = res.locals as AuthLocals;
       locals.member = toPublicMember(session.user);
-      locals.sessionId = sessionId;
+      locals.sessionToken = sessionToken;
       next();
     } catch (error) {
       next(error);
@@ -104,10 +125,40 @@ export function requireAuth(_req: Request, res: Response, next: NextFunction) {
   next();
 }
 
-export function clearAuthCookie(res: Response, db: DatabaseSync): void {
+export function requireAdmin(_req: Request, res: Response, next: NextFunction) {
   const locals = res.locals as AuthLocals;
-  if (locals.sessionId) {
-    deleteSession(db, locals.sessionId);
+  if (!locals.member) {
+    res.status(401).json({ error: "Please sign in to continue." });
+    return;
   }
-  res.clearCookie(SESSION_COOKIE, { path: "/" });
+  if (locals.member.role !== "admin") {
+    res.status(403).json({ error: "You do not have permission to do that." });
+    return;
+  }
+  next();
+}
+
+export function createVerificationToken(): string {
+  return createSecretToken();
+}
+
+export function hashVerificationToken(token: string): string {
+  return hashSecretToken(token);
+}
+
+export function verificationTokenTtlHours(): number {
+  const parsed = Number(process.env.VERIFY_TOKEN_TTL_HOURS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 24;
+}
+
+export function verificationTokenExpiryDate(now = Date.now()): string {
+  return new Date(now + verificationTokenTtlHours() * 60 * 60 * 1000).toISOString();
+}
+
+export async function clearAuthCookie(res: Response, db: AppDatabase): Promise<void> {
+  const locals = res.locals as AuthLocals;
+  if (locals.sessionToken) {
+    await deleteSession(db, locals.sessionToken);
+  }
+  res.clearCookie(SESSION_COOKIE, sessionCookieBaseOptions());
 }

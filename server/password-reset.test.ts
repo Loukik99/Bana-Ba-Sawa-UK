@@ -2,10 +2,10 @@ import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
-import { createApp } from "./app.ts";
-import { createDatabase, insertPasswordResetToken } from "./db.ts";
-import { hashResetToken } from "./auth.ts";
-import type { Mailer, PasswordResetEmail } from "./mail.ts";
+import { createApp } from "./app.js";
+import { createDatabase, insertPasswordResetToken } from "./db.js";
+import { hashResetToken } from "./auth.js";
+import { noopMailer, type Mailer, type PasswordResetEmail } from "./mail.js";
 
 process.env.NODE_ENV = "test";
 process.env.APP_URL = "http://localhost:5173";
@@ -68,13 +68,14 @@ async function requestJson(
 describe("forgot and reset password", () => {
   const inbox: PasswordResetEmail[] = [];
   const mailer: Mailer = {
+    ...noopMailer,
     async sendPasswordResetEmail(payload) {
       inbox.push(payload);
     },
   };
 
-  const db = createDatabase(":memory:");
-  const app = createApp(db, { mailer });
+  let db!: Awaited<ReturnType<typeof createDatabase>>;
+  let app!: ReturnType<typeof createApp>;
   let baseUrl = "";
   let close = async () => {};
 
@@ -87,6 +88,8 @@ describe("forgot and reset password", () => {
   };
 
   before(async () => {
+    db = await createDatabase(":memory:");
+    app = createApp(db, { mailer });
     const server = await listen(app);
     baseUrl = server.baseUrl;
     close = server.close;
@@ -100,7 +103,7 @@ describe("forgot and reset password", () => {
 
   after(async () => {
     await close();
-    db.close();
+    await db.close();
   });
 
   test("unknown emails receive the same response and no mail is sent", async () => {
@@ -147,7 +150,7 @@ describe("forgot and reset password", () => {
 
   test("expired tokens are rejected", async () => {
     const token = "b".repeat(64);
-    insertPasswordResetToken(db, {
+    await insertPasswordResetToken(db, {
       userId: 1,
       tokenHash: hashResetToken(token),
       expiresAt: new Date(Date.now() - 60_000).toISOString(),

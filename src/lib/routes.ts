@@ -15,6 +15,7 @@ export const ROUTES = {
   contact: "/contact",
   privacy: "/privacy-policy",
   documents: "/documents",
+  verifyEmail: "/verify-email",
 } as const;
 
 export interface NavItem {

@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail";
 import Portal from "./pages/Portal";
 import Profile from "./pages/Profile";
 import ScrollToTop from "./components/ScrollToTop";
@@ -48,6 +49,7 @@ export default function App() {
           }
         />
         <Route path={ROUTES.resetPassword} element={<ResetPassword />} />
+        <Route path={ROUTES.verifyEmail} element={<VerifyEmail />} />
         <Route
           path={ROUTES.portal}
           element={

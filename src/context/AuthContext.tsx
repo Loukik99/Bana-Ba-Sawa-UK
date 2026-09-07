@@ -5,6 +5,7 @@ import {
   loginRequest,
   logoutRequest,
   registerRequest,
+  resendVerificationRequest,
   updateProfileRequest,
 } from "../lib/api";
 import type { Member, ProfilePayload, RegisterPayload } from "../lib/types";
@@ -16,6 +17,8 @@ interface AuthContextValue {
   register: (payload: RegisterPayload) => Promise<Member>;
   logout: () => Promise<void>;
   updateProfile: (payload: ProfilePayload) => Promise<Member>;
+  refresh: () => Promise<Member | null>;
+  resendVerification: () => Promise<string>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -72,6 +75,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const data = await updateProfileRequest(payload);
         setMember(data.member);
         return data.member;
+      },
+      async refresh() {
+        const data = await fetchSession();
+        setMember(data.member);
+        return data.member;
+      },
+      async resendVerification() {
+        const data = await resendVerificationRequest();
+        return data.message;
       },
     }),
     [member, loading],

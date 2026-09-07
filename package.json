@@ -9,10 +9,14 @@
     "dev:api": "tsx watch server/index.ts",
     "build": "tsc -b && vite build",
     "start": "cross-env NODE_ENV=production tsx server/index.ts",
+    "db:migrate": "tsx scripts/migrate.ts",
     "lint": "oxlint",
     "preview": "vite preview",
     "test:api": "tsx scripts/auth-flow-check.ts",
-    "test:auth": "cross-env NODE_ENV=test tsx --test server/password-reset.test.ts"
+    "test:auth": "cross-env NODE_ENV=test tsx --test server/password-reset.test.ts server/security.test.ts server/phase3.test.ts",
+    "test:phase3": "cross-env NODE_ENV=test tsx --test server/phase3.test.ts",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "test:config": "tsx scripts/config-check.ts"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -23,6 +27,7 @@
     "helmet": "^8.3.0",
     "lucide-react": "^1.34.0",
     "nodemailer": "^9.1.0",
+    "pg": "^8.16.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2",
@@ -35,6 +40,7 @@
     "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
     "@types/nodemailer": "^8.0.1",
+    "@types/pg": "^8.15.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
@@ -45,5 +51,8 @@
     "tsx": "^4.23.13",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

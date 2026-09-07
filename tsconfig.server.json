@@ -8,6 +8,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "rewriteRelativeImportExtensions": true,
+    "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
     "noEmit": true,
@@ -17,5 +18,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["server"]
+  "include": ["server", "api", "scripts"]
 }

@@ -55,7 +55,7 @@ export function loginRequest(email: string, password: string) {
 }
 
 export function registerRequest(payload: RegisterPayload) {
-  return api<{ member: Member }>("/auth/register", {
+  return api<{ member: Member; welcomeEmailSent?: boolean; verificationEmailSent?: boolean }>("/auth/register", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -87,5 +87,23 @@ export function updateProfileRequest(payload: ProfilePayload) {
   return api<{ member: Member }>("/members/me", {
     method: "PATCH",
     body: JSON.stringify(payload),
+  });
+}
+
+export function validateVerificationTokenRequest(token: string) {
+  return api<{ valid: boolean }>(`/auth/verify-email/validate?token=${encodeURIComponent(token)}`);
+}
+
+export function verifyEmailRequest(token: string) {
+  return api<{ message: string; member: Member | null }>("/auth/verify-email", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+export function resendVerificationRequest(email?: string) {
+  return api<{ message: string }>("/auth/resend-verification", {
+    method: "POST",
+    body: JSON.stringify(email ? { email } : {}),
   });
 }

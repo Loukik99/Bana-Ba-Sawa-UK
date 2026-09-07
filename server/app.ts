@@ -1,12 +1,8 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-import type { DatabaseSync } from "node:sqlite";
 import {
-  createSession,
   deleteExpiredSessions,
   deleteSessionsForUser,
   findPasswordResetTokenByHash,
@@ -20,43 +16,49 @@ import {
   toPublicMember,
   updatePasswordHash,
   updateUser,
-} from "./db.ts";
+  type AppDatabase,
+} from "./db.js";
 import {
   attachSession,
   clearAuthCookie,
   createResetToken,
-  createSessionId,
   hashPassword,
   hashResetToken,
+  hashVerificationToken,
+  issueAuthSession,
   passwordsMatch,
   publicAppUrl,
   requireAuth,
   resetTokenExpiryDate,
   resetTokenTtlMinutes,
-  SESSION_COOKIE,
-  sessionCookieOptions,
-  sessionExpiryDate,
   type AuthLocals,
-} from "./auth.ts";
+} from "./auth.js";
 import {
   fieldErrors,
   forgotPasswordSchema,
   loginSchema,
   profileSchema,
   registerSchema,
+  resendVerificationSchema,
   resetPasswordSchema,
-} from "./validation.ts";
-import { createMailer, type Mailer } from "./mail.ts";
-
-const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-
-function jsonError(res: Response, status: number, error: string, fields?: Record<string, string>) {
-  res.status(status).json(fields ? { error, fields } : { error });
-}
+  verifyEmailSchema,
+} from "./validation.js";
+import { createMailer, type Mailer } from "./mail.js";
+import {
+  createLoginFailureGuard,
+  noopLoginFailureGuard,
+  requestIp,
+  type LoginFailureGuard,
+} from "./login-guard.js";
+import { createResendGuard, noopResendGuard, type ResendGuard } from "./resend-guard.js";
+import { jsonError, logInternalError } from "./http.js";
+import { issueVerificationEmail, sendRegistrationEmails } from "./registration-emails.js";
+import { registerAdminMemberRoutes } from "./routes/admin-members.js";
+import { registerContentRoutes } from "./routes/content.js";
 
 function attachClientOrigin(app: express.Express) {
-  const origin = process.env.CLIENT_ORIGIN;
-  if (!origin) return;
+  const origin = process.env.CLIENT_ORIGIN?.trim().replace(/\/$/, "");
+  if (!origin || origin === "*") return;
 
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", origin);
@@ -73,23 +75,31 @@ function attachClientOrigin(app: express.Express) {
 
 export interface CreateAppOptions {
   mailer?: Mailer;
+  loginGuard?: LoginFailureGuard;
+  resendGuard?: ResendGuard;
 }
 
-export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
+export function createApp(db: AppDatabase, options: CreateAppOptions = {}) {
   const app = express();
   const isProduction = process.env.NODE_ENV === "production";
   const isTest = process.env.NODE_ENV === "test";
   const mailer = options.mailer ?? createMailer();
+  const loginGuard = options.loginGuard ?? (isTest ? noopLoginFailureGuard() : createLoginFailureGuard());
+  const resendGuard = options.resendGuard ?? (isTest ? noopResendGuard() : createResendGuard());
+  const tooManyLoginAttempts = "Too many attempts. Please wait a few minutes and try again.";
   const forgotMessage =
     "If an account exists for that email, we have sent a password reset link.";
   const invalidResetMessage = "This reset link is invalid or has expired.";
+  const invalidVerifyMessage = "This verification link is invalid or has expired.";
+  const resendMessage =
+    "If an account exists for that email and it still needs confirmation, we have sent a verification link.";
 
   if (isProduction) {
     app.set("trust proxy", 1);
   }
 
   attachClientOrigin(app);
-  app.use(express.json({ limit: "32kb" }));
+  app.use(express.json({ limit: "256kb" }));
   app.use(cookieParser());
   app.use(attachSession(db));
 
@@ -111,12 +121,35 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
     message: { error: "Too many reset requests. Please wait a few minutes and try again." },
   });
 
+  const verifyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => isTest,
+    message: { error: "Too many verification requests. Please wait a few minutes and try again." },
+  });
+
+  const profileLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: () => isTest,
+    message: { error: "Too many profile updates. Please wait a few minutes and try again." },
+  });
+
   const api = express.Router();
   api.use(helmet());
 
-  api.get("/health", (_req, res) => {
-    deleteExpiredSessions(db);
-    res.json({ ok: true });
+  api.get("/health", async (_req, res, next) => {
+    try {
+      await db.healthCheck();
+      await deleteExpiredSessions(db);
+      res.json({ ok: true, service: "bana-ba-sawa-api", database: db.kind });
+    } catch (error) {
+      next(error);
+    }
   });
 
   api.get("/auth/me", (_req, res) => {
@@ -134,7 +167,7 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
 
       const data = parsed.data;
       const passwordHash = await hashPassword(data.password);
-      const user = insertUser(db, {
+      const user = await insertUser(db, {
         email: data.email,
         passwordHash,
         firstName: data.firstName,
@@ -146,10 +179,13 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         eligibilityConfirmed: data.eligibilityConfirmed,
       });
 
-      const sessionId = createSessionId();
-      createSession(db, user.id, sessionId, sessionExpiryDate());
-      res.cookie(SESSION_COOKIE, sessionId, sessionCookieOptions());
-      res.status(201).json({ member: toPublicMember(user) });
+      const emails = await sendRegistrationEmails(db, mailer, user);
+      await issueAuthSession(res, db, user.id);
+      res.status(201).json({
+        member: toPublicMember(user),
+        welcomeEmailSent: emails.welcomeEmailSent,
+        verificationEmailSent: emails.verificationEmailSent,
+      });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         jsonError(res, 409, "An account with this email already exists.", {
@@ -169,25 +205,36 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         return;
       }
 
-      const user = findUserByEmail(db, parsed.data.email);
+      const email = parsed.data.email;
+      const ip = requestIp(req);
+      if (loginGuard.isLimited(email, ip)) {
+        jsonError(res, 429, tooManyLoginAttempts);
+        return;
+      }
+
+      const user = await findUserByEmail(db, email);
       const matches = await passwordsMatch(parsed.data.password, user?.passwordHash);
       if (!user || !matches) {
+        loginGuard.recordFailure(email, ip);
         jsonError(res, 401, "Email or password is incorrect.");
         return;
       }
 
-      const sessionId = createSessionId();
-      createSession(db, user.id, sessionId, sessionExpiryDate());
-      res.cookie(SESSION_COOKIE, sessionId, sessionCookieOptions());
+      loginGuard.clear(email, ip);
+      await issueAuthSession(res, db, user.id);
       res.json({ member: toPublicMember(user) });
     } catch (error) {
       next(error);
     }
   });
 
-  api.post("/auth/logout", (_req, res) => {
-    clearAuthCookie(res, db);
-    res.json({ ok: true });
+  api.post("/auth/logout", async (_req, res, next) => {
+    try {
+      await clearAuthCookie(res, db);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
   });
 
   api.post("/auth/forgot-password", forgotLimiter, async (req, res, next) => {
@@ -198,21 +245,25 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         return;
       }
 
-      const user = findUserByEmail(db, parsed.data.email);
-      if (user) {
-        invalidatePasswordResetTokensForUser(db, user.id);
-        const token = createResetToken();
-        insertPasswordResetToken(db, {
-          userId: user.id,
-          tokenHash: hashResetToken(token),
-          expiresAt: resetTokenExpiryDate(),
-        });
-        await mailer.sendPasswordResetEmail({
-          to: user.email,
-          firstName: user.firstName,
-          resetUrl: `${publicAppUrl()}/reset-password?token=${token}`,
-          expiresMinutes: resetTokenTtlMinutes(),
-        });
+      try {
+        const user = await findUserByEmail(db, parsed.data.email);
+        if (user) {
+          await invalidatePasswordResetTokensForUser(db, user.id);
+          const token = createResetToken();
+          await insertPasswordResetToken(db, {
+            userId: user.id,
+            tokenHash: hashResetToken(token),
+            expiresAt: resetTokenExpiryDate(),
+          });
+          await mailer.sendPasswordResetEmail({
+            to: user.email,
+            firstName: user.firstName,
+            resetUrl: `${publicAppUrl()}/reset-password?token=${token}`,
+            expiresMinutes: resetTokenTtlMinutes(),
+          });
+        }
+      } catch (error) {
+        logInternalError("forgot-password", error);
       }
 
       res.json({ message: forgotMessage });
@@ -221,18 +272,22 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
     }
   });
 
-  api.get("/auth/reset-password/validate", (req, res) => {
-    const token = typeof req.query.token === "string" ? req.query.token : "";
-    const record = /^[a-f0-9]{64}$/i.test(token)
-      ? findPasswordResetTokenByHash(db, hashResetToken(token))
-      : undefined;
+  api.get("/auth/reset-password/validate", authLimiter, async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const record = /^[a-f0-9]{64}$/i.test(token)
+        ? await findPasswordResetTokenByHash(db, hashResetToken(token))
+        : undefined;
 
-    if (!record || record.usedAt || record.expiresAt <= nowIso()) {
-      jsonError(res, 400, invalidResetMessage);
-      return;
+      if (!record || record.usedAt || record.expiresAt <= nowIso()) {
+        jsonError(res, 400, invalidResetMessage);
+        return;
+      }
+
+      res.json({ valid: true });
+    } catch (error) {
+      next(error);
     }
-
-    res.json({ valid: true });
   });
 
   api.post("/auth/reset-password", authLimiter, async (req, res, next) => {
@@ -243,19 +298,108 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         return;
       }
 
-      const record = findPasswordResetTokenByHash(db, hashResetToken(parsed.data.token));
+      const record = await findPasswordResetTokenByHash(db, hashResetToken(parsed.data.token));
       if (!record || record.usedAt || record.expiresAt <= nowIso()) {
         jsonError(res, 400, invalidResetMessage);
         return;
       }
 
       const passwordHash = await hashPassword(parsed.data.password);
-      updatePasswordHash(db, record.userId, passwordHash);
-      markPasswordResetTokenUsed(db, record.id);
-      invalidatePasswordResetTokensForUser(db, record.userId);
-      deleteSessionsForUser(db, record.userId);
+      await updatePasswordHash(db, record.userId, passwordHash);
+      await markPasswordResetTokenUsed(db, record.id);
+      await invalidatePasswordResetTokensForUser(db, record.userId);
+      await deleteSessionsForUser(db, record.userId);
+      await clearAuthCookie(res, db);
 
       res.json({ message: "Your password has been updated. You can now sign in." });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  api.get("/auth/verify-email/validate", authLimiter, async (req, res, next) => {
+    try {
+      const token = typeof req.query.token === "string" ? req.query.token : "";
+      const record = /^[a-f0-9]{64}$/i.test(token)
+        ? await db.findEmailVerificationTokenByHash(hashVerificationToken(token))
+        : undefined;
+
+      if (!record || record.usedAt || record.expiresAt <= nowIso()) {
+        jsonError(res, 400, invalidVerifyMessage);
+        return;
+      }
+
+      res.json({ valid: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  api.post("/auth/verify-email", authLimiter, async (req, res, next) => {
+    try {
+      const parsed = verifyEmailSchema.safeParse(req.body);
+      if (!parsed.success) {
+        jsonError(res, 400, invalidVerifyMessage);
+        return;
+      }
+
+      const record = await db.findEmailVerificationTokenByHash(hashVerificationToken(parsed.data.token));
+      if (!record || record.usedAt || record.expiresAt <= nowIso()) {
+        jsonError(res, 400, invalidVerifyMessage);
+        return;
+      }
+
+      await db.markEmailVerified(record.userId);
+      await db.markEmailVerificationTokenUsed(record.id);
+      await db.invalidateEmailVerificationTokensForUser(record.userId);
+
+      const user = await db.findUserById(record.userId);
+      res.json({
+        message: "Your email address has been confirmed.",
+        member: user ? toPublicMember(user) : null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  api.post("/auth/resend-verification", verifyLimiter, async (req, res, next) => {
+    try {
+      const locals = res.locals as AuthLocals;
+      const parsed = resendVerificationSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        jsonError(res, 400, "Please check the highlighted fields.", fieldErrors(parsed.error));
+        return;
+      }
+
+      const requestedEmail = parsed.data.email;
+      const email = locals.member?.email ?? requestedEmail;
+      if (!email) {
+        jsonError(res, 400, "Please enter a valid email.");
+        return;
+      }
+
+      if (resendGuard.isLimited(email)) {
+        jsonError(res, 429, "Too many verification requests. Please wait a few minutes and try again.");
+        return;
+      }
+      resendGuard.record(email);
+
+      try {
+        const user = await findUserByEmail(db, email);
+        if (user && !user.emailVerifiedAt) {
+          await issueVerificationEmail(db, mailer, user);
+        }
+      } catch (error) {
+        logInternalError("resend-verification", error);
+      }
+
+      if (locals.member) {
+        res.json({ message: "If this account still needs confirmation, we have sent a verification link." });
+        return;
+      }
+
+      res.json({ message: resendMessage });
     } catch (error) {
       next(error);
     }
@@ -266,7 +410,7 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
     res.json({ member: locals.member });
   });
 
-  api.patch("/members/me", requireAuth, async (req, res, next) => {
+  api.patch("/members/me", profileLimiter, requireAuth, async (req, res, next) => {
     try {
       const locals = res.locals as AuthLocals;
       const member = locals.member;
@@ -293,7 +437,7 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
           return;
         }
 
-        const current = findUserByEmail(db, member.email);
+        const current = await findUserByEmail(db, member.email);
         const matches = await passwordsMatch(data.currentPassword, current?.passwordHash);
         if (!matches) {
           jsonError(res, 400, "Current password is incorrect.", {
@@ -304,7 +448,8 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         passwordHash = await hashPassword(newPassword);
       }
 
-      const updated = updateUser(db, member.id, {
+      const emailChanged = data.email !== member.email;
+      const updated = await updateUser(db, member.id, {
         email: data.email,
         firstName: data.firstName,
         lastName: data.lastName,
@@ -315,7 +460,22 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         passwordHash,
       });
 
-      res.json({ member: toPublicMember(updated) });
+      if (emailChanged) {
+        await db.clearEmailVerified(member.id);
+        const latest = await db.findUserById(member.id);
+        if (latest) {
+          await issueVerificationEmail(db, mailer, latest);
+        }
+      }
+
+      if (passwordHash) {
+        await invalidatePasswordResetTokensForUser(db, member.id);
+        await deleteSessionsForUser(db, member.id);
+        await issueAuthSession(res, db, member.id);
+      }
+
+      const latest = await db.findUserById(member.id);
+      res.json({ member: toPublicMember(latest ?? updated) });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         jsonError(res, 409, "Another account already uses this email.", {
@@ -327,18 +487,12 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
     }
   });
 
-  app.use("/api", api);
+  registerAdminMemberRoutes(api, db);
+  registerContentRoutes(api, db, mailer);
 
-  if (isProduction) {
-    const distDir = path.join(rootDir, "dist");
-    app.use(express.static(distDir));
-    app.use((req, res, next) => {
-      if (req.path.startsWith("/api")) {
-        next();
-        return;
-      }
-      res.sendFile(path.join(distDir, "index.html"));
-    });
+  app.use("/api", api);
+  if (process.env.VERCEL) {
+    app.use("/", api);
   }
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
@@ -348,7 +502,7 @@ export function createApp(db: DatabaseSync, options: CreateAppOptions = {}) {
         ? (error as { status: number }).status
         : 500;
     if (status >= 500) {
-      console.error(error);
+      logInternalError("api", error);
     }
     jsonError(
       res,

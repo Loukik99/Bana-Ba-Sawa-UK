@@ -1,16 +1,19 @@
 import { createServer } from "node:http";
-import { createApp } from "../server/app.ts";
-import { createDatabase } from "../server/db.ts";
+import { createApp } from "../server/app.js";
+import { createDatabase } from "../server/db.js";
 
 process.env.NODE_ENV = "test";
 
-const db = createDatabase(":memory:");
+const db = await createDatabase(":memory:");
 let lastResetUrl = "";
 const app = createApp(db, {
   mailer: {
     async sendPasswordResetEmail(payload) {
       lastResetUrl = payload.resetUrl;
     },
+    async sendWelcomeEmail() {},
+    async sendVerificationEmail() {},
+    async sendEventNotificationEmail() {},
   },
 });
 
@@ -70,10 +73,18 @@ try {
     method: "POST",
     body: JSON.stringify(memberPayload),
   });
-  const created = res.data?.member as { membershipNumber?: string; membershipStatus?: string; email?: string };
+  const created = res.data?.member as {
+    membershipNumber?: string;
+    membershipStatus?: string;
+    email?: string;
+    role?: string;
+    emailVerifiedAt?: string | null;
+  };
   assert(res.status === 201, `register ${res.status} ${JSON.stringify(res.data)}`);
   assert(created.membershipNumber?.startsWith("BBS-"), "membership number");
   assert(created.membershipStatus === "pending", "pending status");
+  assert(created.role === "member", "default role is member");
+  assert(created.emailVerifiedAt == null, "unverified on register");
   assert(cookie.startsWith("bbs.sid="), "session cookie");
 
   res = await request("/api/auth/me");
@@ -152,6 +163,7 @@ try {
 
   console.log("All authentication and membership API checks passed.");
 } finally {
+  await db.close();
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });

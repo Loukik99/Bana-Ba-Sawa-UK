@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import Header from "../components/Header";
 import Footer from "../components/Footer";
 import Button from "../components/Button";
 import Reveal from "../components/Reveal";
+import FormStatus from "../components/FormStatus";
 import { useAuth } from "../context/AuthContext";
+import { ApiError } from "../lib/api";
 import { ROUTES } from "../lib/routes";
 import type { MembershipStatus } from "../lib/types";
 import heroImage from "../assets/images/community-hero.jpg";
@@ -18,9 +21,13 @@ const STATUS_COPY: Record<MembershipStatus, { label: string; detail: string }> =
     label: "Active member",
     detail: "You are recognised as an active member. Please keep your details current and take part in association life.",
   },
-  inactive: {
-    label: "Inactive",
-    detail: "This account is marked inactive. Please contact the association if you wish to return to active membership.",
+  rejected: {
+    label: "Not approved",
+    detail: "This application was not approved. Please contact the association if you believe this needs review.",
+  },
+  suspended: {
+    label: "Suspended",
+    detail: "This account is currently suspended. Please contact the association if you wish to return to active membership.",
   },
 };
 
@@ -35,11 +42,29 @@ function displayValue(value: string): string {
 }
 
 export default function Portal() {
-  const { member } = useAuth();
+  const { member, resendVerification } = useAuth();
+  const [resendMessage, setResendMessage] = useState("");
+  const [resendError, setResendError] = useState("");
+  const [resending, setResending] = useState(false);
   if (!member) return null;
 
   const status = STATUS_COPY[member.membershipStatus];
   const fullName = `${member.firstName} ${member.lastName}`.trim();
+  const emailVerified = Boolean(member.emailVerifiedAt);
+
+  async function onResend() {
+    setResendMessage("");
+    setResendError("");
+    setResending(true);
+    try {
+      const message = await resendVerification();
+      setResendMessage(message);
+    } catch (caught) {
+      setResendError(caught instanceof ApiError ? caught.message : "Something went wrong. Please try again.");
+    } finally {
+      setResending(false);
+    }
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-ivory">
@@ -90,6 +115,29 @@ export default function Portal() {
                 </Button>
               </div>
             </div>
+
+            {!emailVerified ? (
+              <div className="mt-8 space-y-3">
+                {resendError ? <FormStatus tone="error" message={resendError} /> : null}
+                {resendMessage ? <FormStatus tone="success" message={resendMessage} /> : null}
+                <article className="rounded-[4px] border border-gold-dark/25 bg-cream p-6">
+                  <p className="eyebrow text-gold-dark">Email confirmation</p>
+                  <p className="mt-3 text-sm leading-relaxed text-ink-soft">
+                    Your account is open, but your email address has not been confirmed yet. You can sign in and
+                    update your profile. Event notices are sent only to verified, active members.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="primary"
+                    className="mt-4 rounded-full px-5 py-2.5"
+                    disabled={resending}
+                    onClick={() => void onResend()}
+                  >
+                    {resending ? "Sending..." : "Resend confirmation email"}
+                  </Button>
+                </article>
+              </div>
+            ) : null}
 
             <div className="mt-10 grid grid-cols-1 gap-4 md:grid-cols-3">
               <article className="rounded-[4px] border border-forest-900/8 bg-cream p-6 shadow-[0_8px_24px_rgba(18,52,32,0.04)]">

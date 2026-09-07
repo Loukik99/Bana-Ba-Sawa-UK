@@ -1,0 +1,6 @@
+/data
+*.db
+*.db-wal
+*.db-shm
+/Images & Videos
+/Bana_Ba_Sawa_Website_Draft.pdf

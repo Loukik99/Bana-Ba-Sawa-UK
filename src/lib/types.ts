@@ -1,4 +1,5 @@
-export type MembershipStatus = "pending" | "active" | "inactive";
+export type MembershipStatus = "pending" | "active" | "rejected" | "suspended";
+export type UserRole = "member" | "admin";
 
 export interface Member {
   id: number;
@@ -12,6 +13,8 @@ export interface Member {
   membershipStatus: MembershipStatus;
   membershipNumber: string;
   eligibilityConfirmed: boolean;
+  role: UserRole;
+  emailVerifiedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
