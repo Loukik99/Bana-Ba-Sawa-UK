@@ -9,6 +9,18 @@ export function logInternalError(scope: string, error: unknown): void {
   console.error(`[${scope}] ${message}`);
 }
 
+export function httpErrorStatus(error: unknown): number {
+  if (error instanceof SyntaxError) return 400;
+  if (typeof error === "object" && error !== null) {
+    const typed = error as { status?: unknown; type?: unknown };
+    if (typed.type === "entity.parse.failed" || typed.type === "entity.too.large") {
+      return typed.type === "entity.too.large" ? 413 : 400;
+    }
+    if (typeof typed.status === "number") return typed.status;
+  }
+  return 500;
+}
+
 export function parseIdParam(value: unknown): number | undefined {
   if (typeof value !== "string" && typeof value !== "number") return undefined;
   const parsed = Number(value);

@@ -1,4 +1,12 @@
-import type { FieldErrors, Member, ProfilePayload, RegisterPayload } from "./types";
+import type {
+  AdminMemberListResponse,
+  AdminMemberStats,
+  FieldErrors,
+  Member,
+  MembershipStatus,
+  ProfilePayload,
+  RegisterPayload,
+} from "./types";
 
 export class ApiError extends Error {
   status: number;
@@ -30,7 +38,14 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   const isJson = response.headers.get("content-type")?.includes("application/json");
-  const data = isJson ? ((await response.json()) as { error?: string; fields?: FieldErrors } & T) : null;
+  let data: ({ error?: string; fields?: FieldErrors } & T) | null = null;
+  if (isJson) {
+    try {
+      data = (await response.json()) as { error?: string; fields?: FieldErrors } & T;
+    } catch {
+      throw new ApiError("Something went wrong. Please try again.", response.status || 500);
+    }
+  }
 
   if (!response.ok) {
     throw new ApiError(
@@ -106,4 +121,50 @@ export function resendVerificationRequest(email?: string) {
     method: "POST",
     body: JSON.stringify(email ? { email } : {}),
   });
+}
+
+export function listAdminMembers(
+  params: {
+    status?: MembershipStatus;
+    q?: string;
+    page?: number;
+    pageSize?: number;
+  } = {},
+) {
+  const search = new URLSearchParams();
+  if (params.status) search.set("status", params.status);
+  if (params.q?.trim()) search.set("q", params.q.trim());
+  if (params.page) search.set("page", String(params.page));
+  if (params.pageSize) search.set("pageSize", String(params.pageSize));
+  const query = search.toString();
+  return api<AdminMemberListResponse>(`/admin/members${query ? `?${query}` : ""}`);
+}
+
+export function getAdminMember(id: number) {
+  return api<{ member: Member }>(`/admin/members/${id}`);
+}
+
+export function updateAdminMemberStatus(id: number, status: MembershipStatus) {
+  return api<{ member: Member }>(`/admin/members/${id}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function fetchAdminMemberStats(): Promise<AdminMemberStats> {
+  const [all, active, pending, suspended, rejected] = await Promise.all([
+    listAdminMembers({ page: 1, pageSize: 1 }),
+    listAdminMembers({ status: "active", page: 1, pageSize: 1 }),
+    listAdminMembers({ status: "pending", page: 1, pageSize: 1 }),
+    listAdminMembers({ status: "suspended", page: 1, pageSize: 1 }),
+    listAdminMembers({ status: "rejected", page: 1, pageSize: 1 }),
+  ]);
+
+  return {
+    total: all.total,
+    active: active.total,
+    pending: pending.total,
+    suspended: suspended.total,
+    rejected: rejected.total,
+  };
 }

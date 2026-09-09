@@ -1,24 +1,30 @@
 import { Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
+import { GuestRoute, ProtectedRoute, AdminRoute } from "./components/AuthRoutes";
+import PageHeroPrefetch from "./components/PageHeroPrefetch";
+import ScrollToTop from "./components/ScrollToTop";
+import { ROUTES } from "./lib/routes";
 import About from "./pages/About";
-import Community from "./pages/Community";
-import Membership from "./pages/Membership";
 import ComingSoon from "./pages/ComingSoon";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
+import Community from "./pages/Community";
 import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import VerifyEmail from "./pages/VerifyEmail";
+import Home from "./pages/Home";
+import Login from "./pages/Login";
+import Membership from "./pages/Membership";
 import Portal from "./pages/Portal";
 import Profile from "./pages/Profile";
-import ScrollToTop from "./components/ScrollToTop";
-import { GuestRoute, ProtectedRoute } from "./components/AuthRoutes";
-import { ROUTES } from "./lib/routes";
+import Register from "./pages/Register";
+import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminMemberDetail from "./pages/admin/AdminMemberDetail";
+import AdminMembers from "./pages/admin/AdminMembers";
+import AdminOverview from "./pages/admin/AdminOverview";
 
 export default function App() {
   return (
     <>
       <ScrollToTop />
+      <PageHeroPrefetch />
       <Routes>
         <Route path={ROUTES.home} element={<Home />} />
         <Route path={ROUTES.about} element={<About />} />
@@ -66,6 +72,18 @@ export default function App() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path={ROUTES.admin}
+          element={
+            <AdminRoute>
+              <AdminLayout />
+            </AdminRoute>
+          }
+        >
+          <Route index element={<AdminOverview />} />
+          <Route path="members" element={<AdminMembers />} />
+          <Route path="members/:id" element={<AdminMemberDetail />} />
+        </Route>
         <Route path={ROUTES.support} element={<ComingSoon title="Member Support" />} />
         <Route path={ROUTES.events} element={<ComingSoon title="Events" />} />
         <Route path={ROUTES.gallery} element={<ComingSoon title="Gallery" />} />

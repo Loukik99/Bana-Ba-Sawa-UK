@@ -25,6 +25,7 @@ export interface InsertUserValues {
   postcode: string;
   heritageNotes: string;
   eligibilityConfirmed: boolean;
+  role?: UserRole;
 }
 
 export interface UpdateUserValues {

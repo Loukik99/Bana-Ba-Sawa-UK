@@ -6,13 +6,15 @@ import FormField from "../components/FormField";
 import FormStatus from "../components/FormStatus";
 import { useAuth } from "../context/AuthContext";
 import { ApiError } from "../lib/api";
-import { ROUTES } from "../lib/routes";
-import type { FieldErrors } from "../lib/types";
+import { homePathForRole, ROUTES } from "../lib/routes";
+import type { FieldErrors, UserRole } from "../lib/types";
 import { validateLogin } from "../lib/validation";
 import loginImage from "../assets/images/community-support.jpg";
 
-function safeNextPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return ROUTES.portal;
+function safeNextPath(value: string | null, role: UserRole): string {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return homePathForRole(role);
+  }
   return value;
 }
 
@@ -36,8 +38,8 @@ export default function Login() {
 
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate(safeNextPath(searchParams.get("next")), { replace: true });
+      const member = await login(email, password);
+      navigate(safeNextPath(searchParams.get("next"), member.role), { replace: true });
     } catch (caught) {
       if (caught instanceof ApiError) {
         setFields(caught.fields ?? {});

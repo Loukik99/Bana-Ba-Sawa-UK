@@ -9,6 +9,10 @@ interface AuthFormLayoutProps {
   description: string;
   image: string;
   imageAlt: string;
+  imageClassName?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  imagePriority?: boolean;
   children: ReactNode;
 }
 
@@ -18,6 +22,10 @@ export default function AuthFormLayout({
   description,
   image,
   imageAlt,
+  imageClassName = "absolute inset-0 h-full w-full object-cover object-[62%_38%]",
+  imageWidth = 1536,
+  imageHeight = 1024,
+  imagePriority = false,
   children,
 }: AuthFormLayoutProps) {
   return (
@@ -29,9 +37,12 @@ export default function AuthFormLayout({
             <img
               src={image}
               alt={imageAlt}
-              className="absolute inset-0 h-full w-full object-cover object-[62%_38%]"
-              width={1536}
-              height={1024}
+              className={imageClassName}
+              width={imageWidth}
+              height={imageHeight}
+              {...(imagePriority
+                ? { loading: "eager" as const, fetchPriority: "high" as const }
+                : {})}
             />
           </div>
           <div className="flex flex-col justify-center px-6 py-10 sm:px-10 sm:py-12 lg:px-12 lg:py-14">

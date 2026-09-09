@@ -22,7 +22,7 @@ export function validateRegister(
   if (email) fields.email = email;
   else if (!EMAIL_PATTERN.test(payload.email.trim())) fields.email = "Please enter a valid email";
   if (password) fields.password = password;
-  else if (payload.password.length < 8) fields.password = "Password must be at least 8 characters";
+  else if (payload.password.length < 8) fields.password = "Password must be at least 8 characters.";
   if (confirmPassword) fields.confirmPassword = confirmPassword;
   else if (payload.password !== payload.confirmPassword) {
     fields.confirmPassword = "Passwords do not match";
@@ -51,7 +51,7 @@ export function validateForgotPassword(email: string): FieldErrors {
 export function validateResetPassword(password: string, confirmPassword: string): FieldErrors {
   const fields: FieldErrors = {};
   if (!password) fields.password = "Please enter a new password";
-  else if (password.length < 8) fields.password = "Password must be at least 8 characters";
+  else if (password.length < 8) fields.password = "Password must be at least 8 characters.";
   if (!confirmPassword) fields.confirmPassword = "Please confirm your password";
   else if (password !== confirmPassword) fields.confirmPassword = "Passwords do not match";
   return fields;

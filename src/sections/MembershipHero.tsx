@@ -1,18 +1,17 @@
-import heroImage from "../assets/images/community-hero.jpg";
 import Button from "../components/Button";
+import HeroPicture from "../components/HeroPicture";
 import Reveal from "../components/Reveal";
+import { PAGE_HEROES } from "../lib/page-heroes";
+import { ROUTES } from "../lib/routes";
 
 export default function MembershipHero() {
   return (
     <section className="relative overflow-hidden bg-forest-950" aria-label="Membership">
-      <img
-        src={heroImage}
+      <HeroPicture
+        asset={PAGE_HEROES[ROUTES.membership]}
         alt="Members of the Sawa community gathered outdoors in traditional attire, talking and smiling together"
-        className="absolute inset-0 h-full w-full object-cover object-[72%_42%]"
-        loading="eager"
-        fetchPriority="high"
-        width={1024}
-        height={681}
+        pictureClassName="absolute inset-0 block h-full w-full"
+        className="h-full w-full object-cover object-[72%_42%]"
       />
       <div
         className="absolute inset-0"

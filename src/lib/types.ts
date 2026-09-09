@@ -1,4 +1,5 @@
-export type MembershipStatus = "pending" | "active" | "rejected" | "suspended";
+export const MEMBERSHIP_STATUSES = ["pending", "active", "rejected", "suspended"] as const;
+export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 export type UserRole = "member" | "admin";
 
 export interface Member {
@@ -45,4 +46,19 @@ export interface ProfilePayload {
 
 export interface FieldErrors {
   [key: string]: string;
+}
+
+export interface AdminMemberListResponse {
+  members: Member[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface AdminMemberStats {
+  total: number;
+  active: number;
+  pending: number;
+  suspended: number;
+  rejected: number;
 }

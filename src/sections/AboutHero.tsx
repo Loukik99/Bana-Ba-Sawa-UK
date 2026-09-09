@@ -1,6 +1,7 @@
-import heroImage from "../assets/images/about-hero.jpg";
 import Button from "../components/Button";
+import HeroPicture from "../components/HeroPicture";
 import Reveal from "../components/Reveal";
+import { PAGE_HEROES } from "../lib/page-heroes";
 import { ROUTES } from "../lib/routes";
 
 export default function AboutHero() {
@@ -35,17 +36,13 @@ export default function AboutHero() {
           </div>
         </Reveal>
 
-        <Reveal delay={90} immediate>
-          <div className="overflow-hidden rounded-[4px]">
-            <img
-              src={heroImage}
-              alt="Members of Bana Ba Sawa UK standing together in coordinated cultural attire"
-              className="aspect-[4/3] h-full w-full object-cover object-[center_18%] lg:aspect-[4/5] lg:max-h-[36rem]"
-              width={1000}
-              height={1501}
-            />
-          </div>
-        </Reveal>
+        <div className="overflow-hidden rounded-[4px]">
+          <HeroPicture
+            asset={PAGE_HEROES[ROUTES.about]}
+            alt="Members of Bana Ba Sawa UK standing together in coordinated cultural attire"
+            className="aspect-[4/3] h-full w-full object-cover object-[center_18%] lg:aspect-[4/5] lg:max-h-[36rem]"
+          />
+        </div>
       </div>
     </section>
   );

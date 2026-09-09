@@ -18,7 +18,7 @@ export const registerSchema = z.object({
     .transform((value) => value.toLowerCase()),
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
+    .min(8, "Password must be at least 8 characters.")
     .max(72, "Password is too long"),
   phone: optionalText(40),
   city: optionalText(80),
@@ -71,7 +71,7 @@ export const resetPasswordSchema = z
     token: z.string().regex(/^[a-f0-9]{64}$/i, "This reset link is invalid or has expired."),
     password: z
       .string()
-      .min(8, "Password must be at least 8 characters")
+      .min(8, "Password must be at least 8 characters.")
       .max(72, "Password is too long"),
     confirmPassword: z.string().min(1, "Please confirm your password"),
   })

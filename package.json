@@ -15,7 +15,7 @@
     "test:api": "tsx scripts/auth-flow-check.ts",
     "test:auth": "cross-env NODE_ENV=test tsx --test server/password-reset.test.ts server/security.test.ts server/phase3.test.ts",
     "test:phase3": "cross-env NODE_ENV=test tsx --test server/phase3.test.ts",
-    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts",
+    "admin:create": "cross-env NODE_NO_WARNINGS=1 tsx scripts/create-admin.ts",
     "test:config": "tsx scripts/config-check.ts"
   },
   "dependencies": {

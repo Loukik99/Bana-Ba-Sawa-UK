@@ -42,15 +42,15 @@ export async function issueVerificationEmail(
 ): Promise<boolean> {
   if (user.emailVerifiedAt) return false;
 
-  await db.invalidateEmailVerificationTokensForUser(user.id);
-  const token = createVerificationToken();
-  await db.insertEmailVerificationToken({
-    userId: user.id,
-    tokenHash: hashVerificationToken(token),
-    expiresAt: verificationTokenExpiryDate(),
-  });
-
   try {
+    await db.invalidateEmailVerificationTokensForUser(user.id);
+    const token = createVerificationToken();
+    await db.insertEmailVerificationToken({
+      userId: user.id,
+      tokenHash: hashVerificationToken(token),
+      expiresAt: verificationTokenExpiryDate(),
+    });
+
     await mailer.sendVerificationEmail({
       to: user.email,
       firstName: user.firstName,

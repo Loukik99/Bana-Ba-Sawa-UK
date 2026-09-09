@@ -1,18 +1,17 @@
-import heroImage from "../assets/images/community-hands.jpg";
 import Button from "../components/Button";
+import HeroPicture from "../components/HeroPicture";
 import Reveal from "../components/Reveal";
+import { PAGE_HEROES } from "../lib/page-heroes";
+import { ROUTES } from "../lib/routes";
 
 export default function CommunityHero() {
   return (
     <section className="relative overflow-hidden bg-forest-950" aria-label="Our community">
-      <img
-        src={heroImage}
+      <HeroPicture
+        asset={PAGE_HEROES[ROUTES.community]}
         alt="Members of the Sawa community stacking their hands together in a circle, a gesture of unity and belonging"
-        className="absolute inset-0 h-full w-full object-cover object-[78%_48%]"
-        loading="eager"
-        fetchPriority="high"
-        width={1024}
-        height={682}
+        pictureClassName="absolute inset-0 block h-full w-full"
+        className="h-full w-full object-cover object-[78%_48%]"
       />
       <div
         className="absolute inset-0"

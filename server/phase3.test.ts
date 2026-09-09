@@ -4,8 +4,8 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { createApp } from "./app.js";
 import { createDatabase } from "./db.js";
-import { hashVerificationToken } from "./auth.js";
-import { bootstrapFirstAdmin } from "./admin-bootstrap.js";
+import { hashVerificationToken, passwordsMatch } from "./auth.js";
+import { createAdminAccount } from "./create-admin.js";
 import { createResendGuard } from "./resend-guard.js";
 import {
   escapeHtml,
@@ -131,12 +131,19 @@ describe("phase 3 core membership, content and notification APIs", () => {
     await db.close();
   });
 
+  test("member listing is empty when no members exist", async () => {
+    const result = await db.listMembers({ page: 1, pageSize: 20, offset: 0 });
+    assert.equal(result.total, 0);
+    assert.equal(result.items.length, 0);
+  });
+
   test("registration stores the member, sends welcome and verification mail, and never creates an admin", async () => {
     const failed = await requestJson(baseUrl, "/auth/register", {
       method: "POST",
       body: { firstName: "Amina", email: "not-an-email", password: "short", eligibilityConfirmed: true },
     });
     assert.equal(failed.status, 400);
+    assert.equal((failed.data.fields as { password?: string }).password, "Password must be at least 8 characters.");
     assert.equal(welcomeInbox.length, 0);
     assert.equal(verificationInbox.length, 0);
 
@@ -178,6 +185,39 @@ describe("phase 3 core membership, content and notification APIs", () => {
     assert.ok(stored);
     assert.equal(stored.role, "member");
     assert.equal(stored.welcomeEmailSentAt !== null, true);
+  });
+
+  test("a new member can register with empty optional fields and then sign in", async () => {
+    const email = `fresh.member.${Date.now()}@example.com`;
+    const created = await requestJson(baseUrl, "/auth/register", {
+      method: "POST",
+      body: {
+        firstName: "Koko",
+        lastName: "Ngo",
+        email,
+        password: "SecurePass1",
+        phone: "",
+        city: "",
+        postcode: "",
+        heritageNotes: "",
+        eligibilityConfirmed: true,
+      },
+    });
+    assert.equal(created.status, 201);
+    assert.equal((created.data.member as { email?: string }).email, email);
+    assert.equal((created.data.member as { role?: string }).role, "member");
+    assert.ok(created.cookies.some((cookie) => cookie.startsWith("bbs.sid=")));
+
+    const login = await requestJson(baseUrl, "/auth/login", {
+      method: "POST",
+      body: { email, password: "SecurePass1" },
+    });
+    assert.equal(login.status, 200);
+    assert.equal((login.data.member as { email?: string }).email, email);
+
+    const me = await requestJson(baseUrl, "/auth/me", { cookies: login.cookies });
+    assert.equal(me.status, 200);
+    assert.equal((me.data.member as { email?: string } | null)?.email, email);
   });
 
   test("failed registration does not send a welcome email", async () => {
@@ -274,6 +314,14 @@ describe("phase 3 core membership, content and notification APIs", () => {
     }
   });
 
+  test("unauthenticated callers cannot access admin member APIs", async () => {
+    const list = await requestJson(baseUrl, "/admin/members");
+    assert.equal(list.status, 401);
+
+    const detail = await requestJson(baseUrl, "/admin/members/1");
+    assert.equal(detail.status, 401);
+  });
+
   test("members cannot access admin APIs and cannot change membership status", async () => {
     const list = await requestJson(baseUrl, "/admin/members", { cookies: memberCookies });
     assert.equal(list.status, 403);
@@ -306,31 +354,58 @@ describe("phase 3 core membership, content and notification APIs", () => {
     assert.equal(member.role, "member");
   });
 
-  test("the first admin can be bootstrapped from configuration, not from a public endpoint", async () => {
-    const publicPromote = await requestJson(baseUrl, "/admin/bootstrap", {
+  test("a client admin can be created from the server-side command, not from a public endpoint", async () => {
+    const publicCreate = await requestJson(baseUrl, "/admin/create", {
+      method: "POST",
+      body: { email: "admin.phase3@example.com", password: "SecurePass1" },
+    });
+    assert.equal(publicCreate.status, 404);
+
+    const publicBootstrap = await requestJson(baseUrl, "/admin/bootstrap", {
       method: "POST",
       body: { email: "amina.phase3@example.com" },
     });
-    assert.equal(publicPromote.status, 404);
+    assert.equal(publicBootstrap.status, 404);
 
-    const createdAdmin = await requestJson(baseUrl, "/auth/register", {
-      method: "POST",
-      body: {
-        firstName: "Admin",
-        lastName: "User",
-        email: "admin.phase3@example.com",
-        password: "SecurePass1",
-        eligibilityConfirmed: true,
-      },
+    const created = await createAdminAccount(db, {
+      name: "Admin User",
+      email: "admin.phase3@example.com",
+      password: "SecurePass1",
     });
-    assert.equal(createdAdmin.status, 201);
-    assert.equal((createdAdmin.data.member as { role?: string }).role, "member");
+    assert.equal(created.status, "created");
+    assert.equal(created.email, "admin.phase3@example.com");
+    assert.equal(created.role, "admin");
 
-    const result = await bootstrapFirstAdmin(db, { BOOTSTRAP_ADMIN_EMAIL: "admin.phase3@example.com" });
-    assert.equal(result.promoted, true);
+    const stored = await db.findUserByEmail("admin.phase3@example.com");
+    assert.ok(stored);
+    assert.equal(stored.role, "admin");
+    assert.equal(stored.passwordHash === "SecurePass1", false);
+    assert.equal(await passwordsMatch("SecurePass1", stored.passwordHash), true);
 
-    const second = await bootstrapFirstAdmin(db, { BOOTSTRAP_ADMIN_EMAIL: "amina.phase3@example.com" });
-    assert.equal(second.promoted, false);
+    const duplicate = await createAdminAccount(db, {
+      name: "Admin User",
+      email: "admin.phase3@example.com",
+      password: "SecurePass1",
+    });
+    assert.equal(duplicate.status, "already_admin");
+
+    const existingMember = await createAdminAccount(db, {
+      name: "Amina Mbappe",
+      email: "amina.phase3@example.com",
+      password: "SecurePass1",
+    });
+    assert.equal(existingMember.status, "exists_member");
+    assert.equal((await db.findUserByEmail("amina.phase3@example.com"))?.role, "member");
+
+    const promoted = await createAdminAccount(db, {
+      name: "Amina Mbappe",
+      email: "amina.phase3@example.com",
+      password: "SecurePass1",
+      promoteIfExists: true,
+    });
+    assert.equal(promoted.status, "promoted");
+    assert.equal((await db.findUserByEmail("amina.phase3@example.com"))?.role, "admin");
+    await db.updateUserRole(memberId, "member");
 
     const login = await requestJson(baseUrl, "/auth/login", {
       method: "POST",
@@ -465,6 +540,17 @@ describe("phase 3 core membership, content and notification APIs", () => {
     assert.equal(list.status, 200);
     assert.equal(((list.data.items as unknown[]) ?? []).length, 1);
   });
+
+  test("invalid registration JSON returns a useful error", async () => {
+    const response = await fetch(`${baseUrl}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{not-json",
+    });
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { error?: string };
+    assert.equal(data.error, "Please check the submitted details.");
+  });
 });
 
 describe("welcome email failure does not fail registration or claim delivery", () => {
@@ -512,5 +598,49 @@ describe("welcome email failure does not fail registration or claim delivery", (
     const stored = await db.findUserByEmail("smtp.welcome@example.com");
     assert.ok(stored);
     assert.equal(stored.welcomeEmailSentAt, null);
+  });
+});
+
+describe("verification token storage failure does not fail registration", () => {
+  let db!: Awaited<ReturnType<typeof createDatabase>>;
+  let close = async () => {};
+  let baseUrl = "";
+
+  before(async () => {
+    db = await createDatabase(":memory:");
+    db.insertEmailVerificationToken = async () => {
+      throw new Error("email_verification_tokens is not available");
+    };
+    const app = createApp(db, { mailer: noopMailer });
+    const server = await listen(app);
+    baseUrl = server.baseUrl;
+    close = server.close;
+  });
+
+  after(async () => {
+    await close();
+    await db.close();
+  });
+
+  test("the member can still be created and signed in", async () => {
+    const created = await requestJson(baseUrl, "/auth/register", {
+      method: "POST",
+      body: {
+        firstName: "Koko",
+        lastName: "Ngo",
+        email: "verify.fail@example.com",
+        password: "SecurePass1",
+        eligibilityConfirmed: true,
+      },
+    });
+    assert.equal(created.status, 201);
+    assert.equal(created.data.verificationEmailSent, false);
+
+    const login = await requestJson(baseUrl, "/auth/login", {
+      method: "POST",
+      body: { email: "verify.fail@example.com", password: "SecurePass1" },
+    });
+    assert.equal(login.status, 200);
+    assert.ok(login.cookies.some((cookie) => cookie.startsWith("bbs.sid=")));
   });
 });

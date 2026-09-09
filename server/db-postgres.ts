@@ -108,19 +108,20 @@ export async function createPostgresDatabase(connectionString = process.env.DATA
             email, password_hash, first_name, last_name, phone, city, postcode,
             heritage_notes, membership_status, membership_number, eligibility_confirmed,
             role, email_verified_at, welcome_email_sent_at, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, 'member', NULL, NULL, $11, $12)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', $9, $10, $11, NULL, NULL, $12, $13)
           RETURNING id`,
           [
             values.email,
             values.passwordHash,
             values.firstName,
             values.lastName,
-            values.phone,
-            values.city,
-            values.postcode,
-            values.heritageNotes,
+            values.phone ?? "",
+            values.city ?? "",
+            values.postcode ?? "",
+            values.heritageNotes ?? "",
             placeholderNumber,
             values.eligibilityConfirmed,
+            values.role ?? "member",
             timestamp,
             timestamp,
           ],

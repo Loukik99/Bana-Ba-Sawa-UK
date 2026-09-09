@@ -1,3 +1,5 @@
+import type { UserRole } from "./types";
+
 export const ROUTES = {
   home: "/",
   about: "/about",
@@ -9,6 +11,8 @@ export const ROUTES = {
   resetPassword: "/reset-password",
   portal: "/portal",
   profile: "/portal/profile",
+  admin: "/admin",
+  adminMembers: "/admin/members",
   support: "/support",
   events: "/events",
   gallery: "/gallery",
@@ -17,6 +21,14 @@ export const ROUTES = {
   documents: "/documents",
   verifyEmail: "/verify-email",
 } as const;
+
+export function adminMemberPath(id: number | string): string {
+  return `${ROUTES.adminMembers}/${id}`;
+}
+
+export function homePathForRole(role: UserRole): string {
+  return role === "admin" ? ROUTES.admin : ROUTES.portal;
+}
 
 export interface NavItem {
   label: string;

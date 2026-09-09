@@ -4,6 +4,7 @@ import { Menu, X } from "lucide-react";
 import Logo from "./Logo";
 import Button from "./Button";
 import { NAV_ITEMS, ROUTES } from "../lib/routes";
+import { prefetchHeroForPath } from "../lib/page-heroes";
 import { useAuth } from "../context/AuthContext";
 
 const navLinkClass = (isActive: boolean) =>
@@ -57,6 +58,8 @@ export default function Header() {
                 to={item.path}
                 aria-current={isActive ? "page" : undefined}
                 className={navLinkClass(isActive)}
+                onPointerEnter={() => prefetchHeroForPath(item.path)}
+                onFocus={() => prefetchHeroForPath(item.path)}
               >
                 {item.label}
                 <span
@@ -84,9 +87,20 @@ export default function Header() {
               >
                 {loggingOut ? "Signing out..." : "Log out"}
               </button>
-              <Button to={ROUTES.portal} variant="primary" className="rounded-full px-5 py-2.5">
-                Member Portal
-              </Button>
+              {member.role === "admin" ? (
+                <>
+                  <span className="rounded-full border border-gold/40 bg-ivory px-3 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-gold-dark">
+                    Admin
+                  </span>
+                  <Button to={ROUTES.admin} variant="primary" className="rounded-full px-5 py-2.5">
+                    Admin Dashboard
+                  </Button>
+                </>
+              ) : (
+                <Button to={ROUTES.portal} variant="primary" className="rounded-full px-5 py-2.5">
+                  Member Portal
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -133,6 +147,8 @@ export default function Header() {
                 className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
                   isActive ? "bg-forest-50 text-forest-900" : "text-ink-soft"
                 }`}
+                onPointerEnter={() => prefetchHeroForPath(item.path)}
+                onFocus={() => prefetchHeroForPath(item.path)}
               >
                 {item.label}
               </Link>
@@ -146,15 +162,32 @@ export default function Header() {
             </div>
           ) : member ? (
             <>
-              <Link
-                to={ROUTES.portal}
-                onClick={closeMenu}
-                className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
-                  location.pathname.startsWith(ROUTES.portal) ? "bg-forest-50 text-forest-900" : "text-ink-soft"
-                }`}
-              >
-                Member Portal
-              </Link>
+              {member.role === "admin" ? (
+                <>
+                  <p className="px-2 py-2 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-gold-dark">
+                    Signed in as Admin
+                  </p>
+                  <Link
+                    to={ROUTES.admin}
+                    onClick={closeMenu}
+                    className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
+                      location.pathname.startsWith(ROUTES.admin) ? "bg-forest-50 text-forest-900" : "text-ink-soft"
+                    }`}
+                  >
+                    Admin Dashboard
+                  </Link>
+                </>
+              ) : (
+                <Link
+                  to={ROUTES.portal}
+                  onClick={closeMenu}
+                  className={`px-2 py-3 text-sm font-semibold uppercase tracking-[0.08em] ${
+                    location.pathname.startsWith(ROUTES.portal) ? "bg-forest-50 text-forest-900" : "text-ink-soft"
+                  }`}
+                >
+                  Member Portal
+                </Link>
+              )}
               <div className="mt-3">
                 <Button
                   variant="primary"

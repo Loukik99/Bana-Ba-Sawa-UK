@@ -41,7 +41,7 @@ Local development uses SQLite at `data/bana-ba-sawa.db` and does not require a
 - `npm run test:auth`, run password-reset, security and Phase 3 API tests
 - `npm run test:phase3`, run Phase 3 API tests only
 - `npm run test:config`, check production URL and database config rules
-- `npm run admin:bootstrap`, promote `BOOTSTRAP_ADMIN_EMAIL` if no admin exists yet
+- `npm run admin:create`, create a Client Admin account from the server terminal
 
 ## Project structure
 
@@ -84,7 +84,6 @@ Optional, server-side only:
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
 - `RESET_TOKEN_TTL_MINUTES`
 - `VERIFY_TOKEN_TTL_HOURS`
-- `BOOTSTRAP_ADMIN_EMAIL` — email of the first admin to promote after that member has registered. This is not a public HTTP endpoint. It only promotes an existing account when no admin exists yet.
 
 `APP_URL` must be the live website. Production reset emails must not use
 `http://localhost:5173`. The API will refuse to start when `NODE_ENV=production`
@@ -108,9 +107,9 @@ The schema includes `users`, `sessions`, `password_reset_tokens`,
 `email_verification_tokens`, `events`, `news_items` and `event_notifications`,
 with unique email, membership number and slug constraints and foreign keys.
 
-The first admin is created by setting `BOOTSTRAP_ADMIN_EMAIL` to an already
-registered member and restarting the API, or by running `npm run admin:bootstrap`.
-Newly registered accounts are always ordinary members.
+Create a Client Admin from the server terminal with `npm run admin:create`.
+That command is not a public HTTP endpoint. Newly registered accounts are always
+ordinary members.
 
 Future Events and News pages should use the contract in
 [`docs/EVENTS_NEWS_API.md`](docs/EVENTS_NEWS_API.md). Those frontend pages are not

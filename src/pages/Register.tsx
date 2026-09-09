@@ -9,7 +9,7 @@ import { ApiError } from "../lib/api";
 import { ROUTES } from "../lib/routes";
 import type { FieldErrors } from "../lib/types";
 import { validateRegister } from "../lib/validation";
-import registerImage from "../assets/images/about-join.jpg";
+import registerImage from "../assets/images/acc-pic.webp";
 
 export default function Register() {
   const { register } = useAuth();
@@ -79,7 +79,11 @@ export default function Register() {
       title="Create Your Account"
       description="Open an online member account to follow your membership status and keep your details with the association."
       image={registerImage}
-      imageAlt="Members gathered in a decorated tent during a community celebration"
+      imageAlt="Three members of Bana Ba Sawa UK standing together and smiling at a community gathering"
+      imageClassName="absolute inset-0 h-full w-full object-cover object-[50%_28%]"
+      imageWidth={684}
+      imageHeight={1186}
+      imagePriority
     >
       <form className="space-y-5" onSubmit={onSubmit} noValidate>
         {error ? <FormStatus tone="error" message={error} /> : null}
@@ -137,7 +141,7 @@ export default function Register() {
         </div>
         <FormField
           id="phone"
-          label="Phone (optional)"
+          label="Phone"
           type="tel"
           autoComplete="tel"
           value={phone}
@@ -147,7 +151,7 @@ export default function Register() {
         <div className="grid gap-5 sm:grid-cols-2">
           <FormField
             id="city"
-            label="City (optional)"
+            label="City"
             autoComplete="address-level2"
             value={city}
             onChange={setCity}
@@ -155,7 +159,7 @@ export default function Register() {
           />
           <FormField
             id="postcode"
-            label="Postcode (optional)"
+            label="Postcode"
             autoComplete="postal-code"
             value={postcode}
             onChange={setPostcode}

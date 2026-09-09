@@ -203,7 +203,7 @@ describe("forgot and reset password", () => {
     assert.equal(short.status, 400);
     assert.equal(
       (short.data.fields as { password?: string }).password,
-      "Password must be at least 8 characters",
+      "Password must be at least 8 characters.",
     );
   });
 

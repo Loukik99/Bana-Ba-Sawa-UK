@@ -109,7 +109,7 @@ export default function Portal() {
                   Membership information
                 </h2>
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <Button to={ROUTES.profile} variant="primary" className="rounded-full px-5 py-2.5">
                   Edit Profile
                 </Button>

@@ -51,7 +51,8 @@ import {
   type LoginFailureGuard,
 } from "./login-guard.js";
 import { createResendGuard, noopResendGuard, type ResendGuard } from "./resend-guard.js";
-import { jsonError, logInternalError } from "./http.js";
+import { isPublicRuntime } from "./config.js";
+import { jsonError, httpErrorStatus, logInternalError } from "./http.js";
 import { issueVerificationEmail, sendRegistrationEmails } from "./registration-emails.js";
 import { registerAdminMemberRoutes } from "./routes/admin-members.js";
 import { registerContentRoutes } from "./routes/content.js";
@@ -94,12 +95,35 @@ export function createApp(db: AppDatabase, options: CreateAppOptions = {}) {
   const resendMessage =
     "If an account exists for that email and it still needs confirmation, we have sent a verification link.";
 
-  if (isProduction) {
+  if (isProduction || isPublicRuntime()) {
     app.set("trust proxy", 1);
   }
 
   attachClientOrigin(app);
-  app.use(express.json({ limit: "256kb" }));
+  const jsonParser = express.json({ limit: "256kb" });
+  app.use((req, res, next) => {
+    const existing = (req as Request & { body?: unknown }).body;
+    if (Buffer.isBuffer(existing) || typeof existing === "string") {
+      const raw = Buffer.isBuffer(existing) ? existing.toString("utf8") : existing;
+      if (!raw.trim()) {
+        req.body = {};
+        next();
+        return;
+      }
+      try {
+        req.body = JSON.parse(raw) as unknown;
+        next();
+      } catch {
+        jsonError(res, 400, "Please check the submitted details.");
+      }
+      return;
+    }
+    if (existing && typeof existing === "object") {
+      next();
+      return;
+    }
+    jsonParser(req, res, next);
+  });
   app.use(cookieParser());
   app.use(attachSession(db));
 
@@ -172,10 +196,10 @@ export function createApp(db: AppDatabase, options: CreateAppOptions = {}) {
         passwordHash,
         firstName: data.firstName,
         lastName: data.lastName,
-        phone: data.phone,
-        city: data.city,
-        postcode: data.postcode,
-        heritageNotes: data.heritageNotes,
+        phone: data.phone ?? "",
+        city: data.city ?? "",
+        postcode: data.postcode ?? "",
+        heritageNotes: data.heritageNotes ?? "",
         eligibilityConfirmed: data.eligibilityConfirmed,
       });
 
@@ -497,10 +521,7 @@ export function createApp(db: AppDatabase, options: CreateAppOptions = {}) {
 
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
     if (res.headersSent) return;
-    const status =
-      error && typeof error === "object" && "status" in error && typeof (error as { status: unknown }).status === "number"
-        ? (error as { status: number }).status
-        : 500;
+    const status = httpErrorStatus(error);
     if (status >= 500) {
       logInternalError("api", error);
     }

@@ -61,6 +61,12 @@ function stripSqlComments(sql: string): string {
     .join("\n");
 }
 
+function isIgnorableIdempotentError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+  const code = (error as { code?: string }).code;
+  return code === "42710" || code === "42P07" || code === "42701";
+}
+
 function runSqlBatch(client: PoolClient, sql: string): Promise<unknown> {
   const statements = stripSqlComments(sql)
     .split(";")
@@ -68,7 +74,15 @@ function runSqlBatch(client: PoolClient, sql: string): Promise<unknown> {
     .filter((statement) => statement.length > 0);
 
   return statements.reduce<Promise<unknown>>(
-    (previous, statement) => previous.then(() => client.query(statement)),
+    (previous, statement) =>
+      previous.then(async () => {
+        try {
+          await client.query(statement);
+        } catch (error) {
+          if (isIgnorableIdempotentError(error)) return;
+          throw error;
+        }
+      }),
     Promise.resolve(),
   );
 }
