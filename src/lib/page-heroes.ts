@@ -1,6 +1,6 @@
-import homeJpg from "../assets/images/hero-pick-five.jpg";
-import homeWebp from "../assets/images/hero-pick-five.webp";
-import homeWebp768 from "../assets/images/hero-pick-five-768.webp";
+import homeJpg from "../assets/images/hero-1.jpg";
+import homeWebp from "../assets/images/hero-1.webp";
+import homeWebp768 from "../assets/images/hero-1-768.webp";
 import aboutJpg from "../assets/images/about-hero.jpg";
 import aboutWebp from "../assets/images/about-hero.webp";
 import aboutWebp768 from "../assets/images/about-hero-768.webp";
@@ -30,10 +30,10 @@ export const PAGE_HEROES: Record<string, PageHeroAsset> = {
     jpg: homeJpg,
     webp: [
       { src: homeWebp768, width: 768 },
-      { src: homeWebp, width: 1376 },
+      { src: homeWebp, width: 1847 },
     ],
-    width: 1376,
-    height: 650,
+    width: 1847,
+    height: 851,
     sizes: "100vw",
   },
   [ROUTES.about]: {

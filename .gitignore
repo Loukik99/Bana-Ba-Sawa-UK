@@ -29,6 +29,9 @@ dist-ssr
 *.db-wal
 *.db-shm
 
+# Local audit notes (do not publish)
+AUDIT.md
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -11,7 +11,7 @@ export default function Hero() {
         asset={PAGE_HEROES[ROUTES.home]}
         alt="Members of Bana Ba Sawa UK gathered together in traditional attire at a community celebration"
         pictureClassName="absolute inset-0 block h-full w-full"
-        className="h-full w-full object-cover object-[50%_40%] sm:object-[52%_38%] lg:object-[54%_36%]"
+        className="h-full w-full object-cover object-center"
       />
       <div
         className="absolute inset-0"
